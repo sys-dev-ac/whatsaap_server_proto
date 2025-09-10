@@ -1,33 +1,47 @@
 import { BufferJSON, initAuthCreds, proto } from "baileys"
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb"
+import { DynamoDBDocumentClient, GetCommand, PutCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb"
 
-const useMongoDBAuthState = async (collection, userId) => {
+const client = new DynamoDBClient({
+    region: "us-east-1",
+    endpoint: "http://localhost:8000" // for local dynamodb
+});
 
-    const writeData = (state, id) => {
-        const info = JSON.parse(
-            JSON.stringify(state, BufferJSON.replacer)
-        );
+const docClient = DynamoDBDocumentClient.from(client)
 
-        const update = { $set: { ...info } }
-        return collection.updateOne({ _id: `${userId}:${id}` }, update, { upsert: true })
+const useDynamoDBAuthState = async (tableName, userId) => {
+
+    const writeData = async (state, id) => {
+        const item = JSON.parse(JSON.stringify(state, BufferJSON.replacer))
+        await docClient.send(new PutCommand({
+            TableName: tableName,
+            Item: { PK: `${userId}:${id}`, ...item }
+        }))
     }
 
     const readData = async (id) => {
         try {
-            const doc = await collection.findOne({ _id: `${userId}:${id}` })
-            if (!doc) return null
-            delete doc._id
-            return JSON.parse(JSON.stringify(doc), BufferJSON.reviver)
-        } catch (error) {
-            console.error("readData error:", error)
+            const { Item } = await docClient.send(new GetCommand({
+                TableName: tableName,
+                Key: { PK: `${userId}:${id}` }
+            }))
+            if (!Item) return null
+            delete Item.PK
+            return JSON.parse(JSON.stringify(Item), BufferJSON.reviver)
+        } catch (err) {
+            console.error("readData error:", err)
             return null
         }
     }
 
     const removeData = async (id) => {
         try {
-            await collection.deleteOne({ _id: `${userId}:${id}` })
-        } catch (error) {
-            console.error("removeData error:", error)
+            await docClient.send(new DeleteCommand({
+                TableName: tableName,
+                Key: { PK: `${userId}:${id}` }
+            }))
+        } catch (err) {
+            console.error("removeData error:", err)
         }
     }
 
@@ -67,8 +81,8 @@ const useMongoDBAuthState = async (collection, userId) => {
 
     return {
         state,
-        saveCreds: () => writeData(state.creds, 'creds')   // 👈 fixed
+        saveCreds: () => writeData(state.creds, 'creds')
     }
 }
 
-export default useMongoDBAuthState
+export default useDynamoDBAuthState

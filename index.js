@@ -1,36 +1,40 @@
 import express from 'express';
 import cors from 'cors';
 import { connectionLogic, qrStore } from './whatsaap.js';
+import dynamodbroutes from './dynamodbroutes.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Step 1: Start session
-app.post('/session', (req, res) => {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: "userId required" });
+app.use(dynamodbroutes);
 
-    connectionLogic(userId);
-    res.json({ message: "Session starting...", userId });
-});
+// // Step 1: Start session
+// app.post('/session', (req, res) => {
+//     const { userId } = req.body;
+//     if (!userId) return res.status(400).json({ error: "userId required" });
 
-// Step 2: Get QR separately
-app.get('/session/qr/:userId', (req, res) => {
-    const { userId } = req.params;
-    const qr = qrStore.get(userId);
+//     connectionLogic(userId);
+//     res.json({ message: "Session starting...", userId });
+// });
 
-    if (!qr) {
-        return res.status(404).json({ error: "QR not found yet or already scanned" });
-    }
+// // Step 2: Get QR separately
+// app.get('/session/qr/:userId', (req, res) => {
+//     const { userId } = req.params;
+//     const qr = qrStore.get(userId);
 
-    res.json({ userId, qr });
-});
+//     if (!qr) {
+//         return res.status(404).json({ error: "QR not found yet or already scanned" });
+//     }
+
+//     res.json({ userId, qr });
+// });
 
 
 app.get("/health" , (req, res ) =>{
     res.status(200).json({ status: "OK" });
 });
+
 
 app.listen(8080, () => {
     console.log("🚀 Server listening on 8080");

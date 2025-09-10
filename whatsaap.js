@@ -3,6 +3,7 @@ import P from 'pino';
 import QRCode from 'qrcode';
 import { config } from "dotenv";
 import useMongoDBAuthState from "./db.js";
+import useDynamoDBAuthState from "./usedynamodb.js";
 import { MongoClient } from "mongodb";
 
 config({
@@ -14,15 +15,17 @@ const qrStore = new Map();
 async function connectionLogic(userId) {
 
 
-    const mongoClient = new MongoClient(process.env.MONGO_URI);
-    await mongoClient.connect();
+    // const mongoClient = new MongoClient(process.env.MONGO_URI);
+    // await mongoClient.connect();
 
     // const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
 
-    const collection = mongoClient.db('whatsapp_api').collection('botInfo');
+    // const collection = mongoClient.db('whatsapp_api').collection('botInfo');
 
 
-    const { state, saveCreds } = await useMongoDBAuthState(collection, userId);
+    // const { state, saveCreds } = await useMongoDBAuthState(collection, userId);
+
+    const {state , saveCreds} = await useDynamoDBAuthState("WhatsAppAuth", userId);
 
     const sock = makeWASocket({
         auth: state,
@@ -44,7 +47,7 @@ async function connectionLogic(userId) {
             const qrDataUrl = await QRCode.toDataURL(qr);
             qrStore.set(userId, qrDataUrl);
 
-            // console.log(await QRCode.toString(qr, { type: 'terminal', small: true }));
+            console.log(await QRCode.toString(qr, { type: 'terminal', small: true }));
         }
 
         if (connection === "close") {
@@ -73,6 +76,9 @@ async function connectionLogic(userId) {
     });
 
 }
+
+
+// connectionLogic("testuser");
 
 export {
     connectionLogic,
