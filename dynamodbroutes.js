@@ -1,20 +1,26 @@
 import { Router } from "express";
 import { CreateTableCommand, DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb"; // help to manage the operations 
+import 'dotenv/config'
 
-const client = new DynamoDBClient({
+const config = process.env.production ? {
+    region: "us-west-2",
+} : {
     region: "local",
     endpoint: "http://localhost:8000" // for local dynamodb
-});
+};
+
+const client = new DynamoDBClient(config);
 
 const db = DynamoDBDocumentClient.from(client);
 
 const router = Router();
 
 router.post('/create', async (req, res) => {
+    const { table_name } = req.body;
 
     const createParams = {
-        TableName: "whatsapp_auth",
+        TableName: table_name,
         // here we are decalring the primary key
         KeySchema: [{
             AttributeName: "id",
@@ -28,7 +34,7 @@ router.post('/create', async (req, res) => {
             ReadCapacityUnits: 5,
             WriteCapacityUnits: 5
         }
-    }
+    };
 
     // create new table 
     try {
@@ -57,6 +63,7 @@ router.post('/create/whatsaap', async (req, res) => {
         return res.status(500).json({ error: "Could not create table" });
     }
 })
+
 router.post('/add', async (req, res) => {
     try {
         const params = {

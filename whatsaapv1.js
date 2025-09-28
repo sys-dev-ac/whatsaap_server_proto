@@ -1,34 +1,37 @@
-import makeWASocket, { DisconnectReason } from "baileys";
+import makeWASocket, { DisconnectReason , BufferJSON } from "baileys";
 import P from 'pino';
 import QRCode from 'qrcode';
 import { config } from "dotenv";
 import useMongoDBAuthState from "./db.js";
 import useDynamoDBAuthState from "./usedynamodb.js";
 import { MongoClient } from "mongodb";
-import redis from "./redis.js";
+import redis, { clearState } from "./redis.js";
+
 
 config({
     path: '.env'
 });
 
 const qrStore = new Map();
-const sessions = new Map();
+
+const sessions = {
+    get: async (sessionId) => {
+        const data = await redis.get(sessionId);
+        return data ? JSON.parse(data, BufferJSON.reviver) : null;
+    },
+    set: async (sessionId, userSock) => {
+        await redis.set(sessionId, JSON.stringify(userSock, BufferJSON.replacer));
+    }
+};
 
 
+async function claimSession(sessionId) {
+    const lockKey = `session:${sessionId}:lock`;
+    const acquired = await redis.set(lockKey, 'locked', 'NX', 'EX', 60); // Lock for 60s
+    return acquired === 'OK';
+}
 
 async function connectionLogic(userId) {
-
-
-    // const mongoClient = new MongoClient(process.env.MONGO_URI);
-    // await mongoClient.connect();
-
-    // const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
-
-    // const collection = mongoClient.db('whatsapp_api').collection('botInfo');
-
-
-    // const { state, saveCreds } = await useMongoDBAuthState(collection, userId);
-
     const { state, saveCreds } = await useDynamoDBAuthState("WhatsAppAuth", userId);
 
     const sock = makeWASocket({
@@ -39,13 +42,14 @@ async function connectionLogic(userId) {
 
     sock.ev.on('creds.update', saveCreds);
 
+    sessions.set(userId, sock.auth);
+
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (connection === 'open') {
             console.log("✅ Successfully logged in!");
-            sessions.set(userId, sock);
-            await redis.set(userId, JSON.stringify({ sock }));
+            sessions.set(userId, sock.auth);
         }
 
         if (qr) {
@@ -54,9 +58,7 @@ async function connectionLogic(userId) {
             qrStore.set(userId, qrDataUrl);
 
             console.log(await QRCode.toString(qr, { type: 'terminal', small: true }));
-            sessions.set(userId, sock);
-
-            return;
+            sessions.set(userId, sock.auth);
         }
 
         if (connection === "close") {
@@ -66,6 +68,7 @@ async function connectionLogic(userId) {
                 connectionLogic(userId);
             } else {
                 console.log("❌ Logged out. Need new QR scan.");
+                await redis.set(`wa:status:${userId}`, "logged_out");
             }
         }
     });
@@ -84,27 +87,45 @@ async function connectionLogic(userId) {
         }
     });
 
+    return sock;
 }
 
 
-const fetchGroups = async (userId) => {
-    const session = sessions.get(userId);
-    if (!session) {
-        throw new Error(`No active session for userId: ${userId}`);
+const getGroups = async (sessionId) => {
+    // load auth state from DynamoDB (or MongoDB)
+
+    const { state, saveCreds } = await useDynamoDBAuthState("WhatsAppAuth", sessionId);
+
+    const localsock = makeWASocket({
+        auth: state,
+        logger: P(),
+        connectTimeoutMs: 60_000
+    });
+
+    if (!localsock) {
+        throw new Error("No active session");
     }
-    const groups = await session.groupFetchAllParticipating();
-    return Object.values(groups);
-}
+    console.log("Fetching groups for session:", sessionId);
+    console.log("The sock object is ", localsock);
+    return (await localsock.groupFetchAllParticipating()).filter(g => g.id.endsWith("@g.us"));
+};
+
+
+// connectionLogic("test_user_2");
 
 const init = async () => {
-    // Any global initialization can go here
-    console.log("Initialization complete.");
-}
+    const sessions = await redis.keys("*");
 
-connectionLogic("test_user_1");
+    console.log("sessions from redis:", sessions);
+    for (const sessionId of sessions) {
+        connectionLogic(sessionId);
+    }
+
+}
 
 export {
     connectionLogic,
-    fetchGroups,
+    getGroups,
+    qrStore,
     init,
 };
