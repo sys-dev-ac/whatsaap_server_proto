@@ -101,7 +101,7 @@ const init = async () => {
     console.log("Initialization complete.");
 }
 
-connectionLogic("test_user_1");
+// connectionLogic("test_user_1");
 
 export {
     connectionLogic,

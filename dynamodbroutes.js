@@ -4,7 +4,7 @@ import { DynamoDBDocumentClient, PutCommand, ScanCommand } from "@aws-sdk/lib-dy
 import 'dotenv/config'
 
 const config = process.env.production ? {
-    region: "us-west-2",
+    region: "ap-south-1",
 } : {
     region: "local",
     endpoint: "http://localhost:8000" // for local dynamodb
@@ -86,8 +86,10 @@ router.post('/add', async (req, res) => {
 
 router.get('/getdata', async (req, res) => {
     try {
+        const { table_name } = req.body;
+
         const params = {
-            TableName: 'WhatsAppAuth',
+            TableName: table_name,
         }
 
         const data = await db.send(new ScanCommand(params));

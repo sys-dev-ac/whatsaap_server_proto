@@ -2,10 +2,14 @@ import { BufferJSON, initAuthCreds, proto } from "baileys"
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb"
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb"
 
-const client = new DynamoDBClient({
-    region: "us-east-1",
-    endpoint: "http://localhost:8000" // for local DynamoDB
-})
+const config = process.env.production ? {
+    region: "ap-south-1",
+} : {
+    region: "local",
+    endpoint: "http://localhost:8000" // for local dynamodb
+};
+
+const client = new DynamoDBClient(config);
 
 const docClient = DynamoDBDocumentClient.from(client)
 
